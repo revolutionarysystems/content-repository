@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.UUID;
 import javax.jcr.Binary;
+import javax.jcr.ItemNotFoundException;
 import javax.jcr.Node;
 import javax.jcr.NodeIterator;
 import javax.jcr.Property;
@@ -31,7 +32,6 @@ import org.modeshape.jcr.api.query.Query;
 import org.modeshape.jcr.api.query.QueryResult;
 import uk.co.revsys.content.repository.annotation.ContentName;
 import uk.co.revsys.content.repository.annotation.ContentType;
-import uk.co.revsys.content.repository.annotation.Versioned;
 import uk.co.revsys.content.repository.model.Attachment;
 import uk.co.revsys.content.repository.model.ChildNode;
 import uk.co.revsys.content.repository.model.ContentNode;
@@ -63,9 +63,9 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         try {
             Node root = session.getRootNode();
             Node node;
-            if(path == null || path.isEmpty()){
+            if (path == null || path.isEmpty()) {
                 node = root;
-            }else{
+            } else {
                 node = root.getNode(path);
             }
             ContentNode contentNode = new ContentNode();
@@ -82,14 +82,13 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         try {
             Node root = session.getRootNode();
             Node parentNode;
-            if(path == null || path.isEmpty()){
+            if (path == null || path.isEmpty()) {
                 parentNode = root;
-            }else if (root.hasNode(path)) {
+            } else if (root.hasNode(path)) {
                 parentNode = root.getNode(path);
             } else {
                 parentNode = root.addNode(path);
             }
-            boolean versioned = content.getClass().getAnnotation(Versioned.class) != null;
             Map<String, String> properties = BeanUtils.describe(content);
             ContentName contentNameAnnotation = content.getClass().getAnnotation(ContentName.class);
             String name;
@@ -104,9 +103,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
                 throw new RepositoryException(path + " already exists");
             }
             node = parentNode.addNode(name);
-            if (versioned) {
-                node.addMixin("mix:versionable");
-            }
+            node.addMixin("mix:versionable");
             for (Entry<String, String> property : properties.entrySet()) {
                 node.setProperty(property.getKey(), property.getValue());
             }
@@ -140,21 +137,16 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         try {
             Node root = session.getRootNode();
             VersionManager versionManager = session.getWorkspace().getVersionManager();
-            boolean versioned = content.getClass().getAnnotation(Versioned.class) != null;
             Map<String, String> properties = BeanUtils.describe(content);
             Node node = root.getNode(path);
-            if (versioned) {
-                versionManager.checkout(node.getPath());
-            }
+            versionManager.checkout(node.getPath());
             for (Entry<String, String> property : properties.entrySet()) {
                 node.setProperty(property.getKey(), property.getValue());
             }
             node.setProperty(INTERNAL_CONTENT_CLASS_PROPERTY, content.getClass().getName());
             node.setProperty(INTERNAL_MODIFIED_PROPERTY, Calendar.getInstance());
             session.save();
-            if (versioned) {
-                versionManager.checkin(node.getPath());
-            }
+            versionManager.checkin(node.getPath());
             ContentNode contentNode = createContentNode(node);
             return contentNode;
         } catch (InvocationTargetException ex) {
@@ -173,10 +165,9 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         Session session = getSession();
         try {
             Node root = session.getRootNode();
-            if (root.hasNode(path)) {
-                Node node = root.getNode(path);
-                node.remove();
-            }
+            Node node = root.getNode(path);
+            node.remove();
+            session.save();
         } finally {
             session.logout();
         }
@@ -219,9 +210,10 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             VersionIterator iterator = versionHistory.getAllVersions();
             while (iterator.hasNext()) {
                 javax.jcr.version.Version jcrVersion = iterator.nextVersion();
+                Node node = jcrVersion.getFrozenNode();
                 Version version = new Version();
-                version.setName(jcrVersion.getName());
-                version.setPath(jcrVersion.getPath());
+                version.setName(node.getName());
+                version.setPath(node.getPath());
                 version.setCreationTime(jcrVersion.getCreated().getTime());
                 versions.add(version);
             }
@@ -236,10 +228,9 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         Session session = getSession();
         try {
             Node root = session.getRootNode();
-            if (!root.hasNode(path)) {
-                throw new RepositoryException(path + " does not exist");
-            }
+            VersionManager versionManager = session.getWorkspace().getVersionManager();
             Node parentNode = root.getNode(path);
+            versionManager.checkout(parentNode.getPath());
             Node attachmentsNode;
             if (parentNode.hasNode(INTERNAL_ATTACHMENTS_FOLDER)) {
                 attachmentsNode = parentNode.getNode(INTERNAL_ATTACHMENTS_FOLDER);
@@ -256,6 +247,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             node.setProperty("jcr:data", binary);
             node.setProperty("jcr:mimeType", attachment.getContentType());
             session.save();
+            versionManager.checkin(parentNode.getPath());
         } finally {
             session.logout();
         }
@@ -266,9 +258,6 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         Session session = getSession();
         try {
             Node root = session.getRootNode();
-            if (!root.hasNode(path)) {
-                throw new RepositoryException(path + " does not exist");
-            }
             Node parentNode = root.getNode(path);
             if (!parentNode.hasNode(INTERNAL_ATTACHMENTS_FOLDER + "/" + name)) {
                 throw new RepositoryException("Attachment " + name + " does not exist for " + path);
@@ -287,6 +276,25 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         }
     }
 
+    public void deleteAttachment(String path, String name) throws RepositoryException{
+        Session session = getSession();
+        try {
+            Node root = session.getRootNode();
+            VersionManager versionManager = session.getWorkspace().getVersionManager();
+            Node parentNode = root.getNode(path);
+            versionManager.checkout(parentNode.getPath());
+            if (!parentNode.hasNode(INTERNAL_ATTACHMENTS_FOLDER + "/" + name)) {
+                throw new RepositoryException("Attachment " + name + " does not exist for " + path);
+            }
+            Node node = parentNode.getNode(INTERNAL_ATTACHMENTS_FOLDER + "/" + name);
+            node.remove();
+            session.save();
+            versionManager.checkin(parentNode.getPath());
+        } finally {
+            session.logout();
+        }
+    }
+    
     private Session getSession() throws RepositoryException {
         return JCRFactory.getRepository().login(workspace);
     }
@@ -299,13 +307,15 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     private ContentNode updateContentNode(ContentNode contentNode, Node node) throws RepositoryException {
         contentNode.setName(node.getName());
         contentNode.setPath(node.getPath());
-        if (node.getParent() != null) {
+        try {
             contentNode.setParent(node.getParent().getPath());
+        } catch (ItemNotFoundException ex) {
+            // Ignore
         }
         NodeIterator children = node.getNodes();
         while (children.hasNext()) {
             Node child = children.nextNode();
-            if (!child.getPrimaryNodeType().getName().equals("nt:folder")) {
+            if (!child.getName().startsWith(JCR_PROPERTY_PREFIX) && !child.getPrimaryNodeType().getName().equals("nt:folder")) {
                 ChildNode childNode = new ChildNode();
                 childNode.setName(child.getName());
                 childNode.setPath(child.getPath());

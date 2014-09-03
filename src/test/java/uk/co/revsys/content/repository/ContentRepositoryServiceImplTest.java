@@ -59,8 +59,8 @@ public class ContentRepositoryServiceImplTest extends AbstractShiroTest{
         User user = new User();
         user.setName("Test User");
         PrincipalCollection mockPrincipalCollection = mocksControl.createMock(PrincipalCollection.class);
-        expect(mockSubject.getPrincipals()).andReturn(mockPrincipalCollection).times(2);
-        expect(mockPrincipalCollection.oneByType(User.class)).andReturn(user).times(2);
+        expect(mockSubject.getPrincipals()).andReturn(mockPrincipalCollection).times(3);
+        expect(mockPrincipalCollection.oneByType(User.class)).andReturn(user).times(3);
         mocksControl.replay();
         ContentRepositoryServiceImpl repository = new ContentRepositoryServiceImpl("default");
         TestObject object1 = new TestObject("Test Object 1");
@@ -101,11 +101,12 @@ public class ContentRepositoryServiceImplTest extends AbstractShiroTest{
         assertEquals(2, versions.size());
         repository.delete("abc/Test_Object_1");
         try{
-            repository.get("act/Test_Object_1");
+            repository.get("abc/Test_Object_1");
             fail("Expected PathNotFoundException to be thrown");
         }catch(PathNotFoundException ex){
             //pass
         }
+        repository.update("abc/Test_Object_2", object2);
         Attachment attachment = new Attachment();
         attachment.setName("test.txt");
         attachment.setContentType("text/plain");
@@ -121,6 +122,16 @@ public class ContentRepositoryServiceImplTest extends AbstractShiroTest{
         assertEquals("test.txt", attachment.getName());
         assertEquals("text/plain", attachment.getContentType());
         assertEquals("This is not a test", IOUtils.toString(attachment.getContent()));
+        repository.deleteAttachment("abc/Test_Object_2", "test.txt");
+        node = repository.get("");
+        assertEquals("/", node.getPath());
+        TestObject object3 = new TestObject("Test Object 3");
+        node = repository.create("", object3);
+        assertEquals("/Test_Object_3", node.getPath());
+        assertEquals("Test_Object_3", node.getName());
+        node = repository.get("Test_Object_3");
+        assertEquals("/Test_Object_3", node.getPath());
+        assertEquals("Test_Object_3", node.getName());
     }
 
 }

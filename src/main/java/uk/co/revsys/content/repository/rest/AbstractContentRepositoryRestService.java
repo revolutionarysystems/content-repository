@@ -53,7 +53,7 @@ public abstract class AbstractContentRepositoryRestService {
     }
     
     @GET
-    @Path("/{path:[A-Za-z0-9-/]*}")
+    @Path("/{path:.*}")
     @Produces(MediaType.APPLICATION_JSON)
     public Response getNode(@PathParam("path") String path) {
         try {
@@ -61,8 +61,10 @@ public abstract class AbstractContentRepositoryRestService {
             ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
             return Response.ok(objectMapper.writeValueAsString(repository.get(path))).build();
         } catch (JsonProcessingException ex) {
+            LOGGER.error("Unable to get node " + path, ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         } catch (RepositoryException ex) {
+            LOGGER.error("Unable to get node " + path, ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         }
     }
@@ -71,13 +73,17 @@ public abstract class AbstractContentRepositoryRestService {
     @Consumes(MediaType.APPLICATION_JSON)
     @Path("/create/")
     public Response createNodeInRoot(String json){
+        LOGGER.info("Create node in root");
+        System.out.println("Create node in root");
         return createNode("", json);
     }
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)       
-    @Path("/create/{path:[A-Za-z0-9-/]*}")
+    @Path("/create/{path:.*}")
     public Response createNode(@PathParam("path") String path, String json) {
+        LOGGER.info("Create node " + path + ": " + json);
+        System.out.println("Create node " + path + ": " + json);
         try {
             if (!authorisationHandler.isAdministrator()) {
                 return Response.status(Response.Status.FORBIDDEN).build();
@@ -88,17 +94,17 @@ public abstract class AbstractContentRepositoryRestService {
             ContentNode node = repository.create(path, content);
             return Response.ok(objectMapper.writeValueAsString(node)).build();
         } catch (IOException ex) {
-            LOGGER.error("Unable to save node", ex);
+            LOGGER.error("Unable to create node", ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         } catch (RepositoryException ex) {
-            LOGGER.error("Unable to save node", ex);
+            LOGGER.error("Unable to create node", ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         }
     }
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
-    @Path("/update/{path:[A-Za-z0-9-/]*}")
+    @Path("/update/{path:.*}")
     public Response updateNode(@PathParam("path") String path, String json) {
         try {
             if (!authorisationHandler.isAdministrator()) {
@@ -110,16 +116,16 @@ public abstract class AbstractContentRepositoryRestService {
             ContentNode node = repository.update(path, content);
             return Response.ok(objectMapper.writeValueAsString(node)).build();
         } catch (IOException ex) {
-            LOGGER.error("Unable to save node", ex);
+            LOGGER.error("Unable to update node", ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         } catch (RepositoryException ex) {
-            LOGGER.error("Unable to save node", ex);
+            LOGGER.error("Unable to update node", ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         }
     }
 
     @DELETE
-    @Path("/{path:[A-Za-z0-9-/]*}")
+    @Path("/delete/{path:.*}")
     public Response deleteNode(@PathParam("path") String path) {
         try {
             if (!authorisationHandler.isAdministrator()) {
@@ -153,7 +159,7 @@ public abstract class AbstractContentRepositoryRestService {
     }
 
     @GET
-    @Path("/versions/{path:[A-Za-z0-9-/]*}")
+    @Path("/versions/{path:.*}")
     @Produces(MediaType.APPLICATION_JSON)
     public Response getVersions(@PathParam("path") String path) {
         try {
@@ -164,15 +170,17 @@ public abstract class AbstractContentRepositoryRestService {
             ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
             return Response.ok(objectMapper.writeValueAsString(repository.getVersionHistory(path))).build();
         } catch (JsonProcessingException ex) {
+            LOGGER.error("Unable to get versions for " + path, ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         } catch (RepositoryException ex) {
+            LOGGER.error("Unable to get versions for " + path, ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         }
     }
 
     @POST
     @Consumes(MediaType.MULTIPART_FORM_DATA)
-    @Path("/attachment/{path:[A-Za-z0-9-/]*}")
+    @Path("/attachment/{path:.*}")
     public Response saveAttachment(@PathParam("path") String path, BufferedInMultiPart bufferedInMultiPart) {
         try {
             if (!authorisationHandler.isAdministrator()) {
@@ -196,12 +204,13 @@ public abstract class AbstractContentRepositoryRestService {
             repository.saveAttachment(path, attachment);
             return Response.ok().build();
         } catch (RepositoryException ex) {
+            LOGGER.error("Unable to save attachment for " + path, ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         }
     }
 
     @GET
-    @Path("/attachment/{path:[A-Za-z0-9-\\./]*}")
+    @Path("/attachment/{path:.*}")
     public Response getAttachment(@PathParam("path") String path) {
         try {
             if (!authorisationHandler.isAdministrator()) {
@@ -214,6 +223,26 @@ public abstract class AbstractContentRepositoryRestService {
             Attachment attachment = repository.getAttachment(path, name);
             return Response.ok(attachment.getContent()).type(attachment.getContentType()).build();
         } catch (RepositoryException ex) {
+            LOGGER.error("Unable to get attachment for " + path, ex);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
+        }
+    }
+    
+    @DELETE
+    @Path("/attachment/{path:.*}")
+    public Response deleteAttachment(@PathParam("path") String path) {
+        try {
+            if (!authorisationHandler.isAdministrator()) {
+                return Response.status(Response.Status.FORBIDDEN).build();
+            }
+            String workspace = authorisationHandler.getUserWorkspace();
+            ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
+            String name = path.substring(path.lastIndexOf("/") + 1);
+            path = path.substring(0, path.lastIndexOf("/"));
+            repository.deleteAttachment(path, name);
+            return Response.noContent().build();
+        } catch (RepositoryException ex) {
+            LOGGER.error("Unable to get attachment for " + path, ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         }
     }

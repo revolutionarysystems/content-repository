@@ -24,4 +24,6 @@ public interface ContentRepositoryService<C extends Object> {
     public void saveAttachment(String path, Attachment attachment) throws RepositoryException;
     
     public Attachment getAttachment(String path, String name) throws RepositoryException;
+    
+    public void deleteAttachment(String path, String name) throws RepositoryException;
 }
