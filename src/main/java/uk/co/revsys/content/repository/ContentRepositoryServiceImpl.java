@@ -187,8 +187,8 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
                 SearchResult searchResult = new SearchResult();
                 searchResult.setScore(row.getScore());
                 Node node = row.getNode();
-                searchResult.setPath(node.getPath());
-                searchResult.setName(node.getName());
+                ContentNode contentNode = createContentNode(node);
+                searchResult.setNode(contentNode);
                 results.add(searchResult);
             }
             return results;

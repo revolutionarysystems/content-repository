@@ -1,10 +1,12 @@
 package uk.co.revsys.content.repository.model;
 
+import com.fasterxml.jackson.annotation.JsonUnwrapped;
+
 public class SearchResult {
 
     private double score;
-    private String path;
-    private String name;
+    @JsonUnwrapped
+    private ContentNode node;
 
     public double getScore() {
         return score;
@@ -14,20 +16,12 @@ public class SearchResult {
         this.score = score;
     }
 
-    public String getPath() {
-        return path;
+    public ContentNode getNode() {
+        return node;
     }
 
-    public void setPath(String path) {
-        this.path = path;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
+    public void setNode(ContentNode node) {
+        this.node = node;
     }
     
 }

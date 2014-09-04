@@ -96,7 +96,7 @@ public class ContentRepositoryServiceImplTest extends AbstractShiroTest{
         assertEquals(2, node.getChildren().size());
         List<SearchResult> results = repository.find("Test Object 1");
         assertEquals(2, results.size());
-        assertTrue(results.get(0).getPath().startsWith("/abc/Test_Object"));
+        assertTrue(results.get(0).getNode().getPath().startsWith("/abc/Test_Object"));
         List<Version> versions = repository.getVersionHistory("/abc/Test_Object_1");
         assertEquals(2, versions.size());
         repository.delete("abc/Test_Object_1");

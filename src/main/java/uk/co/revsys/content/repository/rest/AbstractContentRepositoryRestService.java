@@ -227,24 +227,5 @@ public abstract class AbstractContentRepositoryRestService {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         }
     }
-    
-    @DELETE
-    @Path("/attachment/{path:.*}")
-    public Response deleteAttachment(@PathParam("path") String path) {
-        try {
-            if (!authorisationHandler.isAdministrator()) {
-                return Response.status(Response.Status.FORBIDDEN).build();
-            }
-            String workspace = authorisationHandler.getUserWorkspace();
-            ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
-            String name = path.substring(path.lastIndexOf("/") + 1);
-            path = path.substring(0, path.lastIndexOf("/"));
-            repository.deleteAttachment(path, name);
-            return Response.noContent().build();
-        } catch (RepositoryException ex) {
-            LOGGER.error("Unable to get attachment for " + path, ex);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
-        }
-    }
 
 }
