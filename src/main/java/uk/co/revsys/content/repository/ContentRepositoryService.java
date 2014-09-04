@@ -15,7 +15,7 @@ public interface ContentRepositoryService<C extends Object> {
     
     public ContentNode<C> update(String path, Object content) throws RepositoryException;
     
-    public List<SearchResult> find(String query) throws RepositoryException;
+    public List<SearchResult> find(String expression, int offset, int limit) throws RepositoryException;
     
     public void delete(String path) throws RepositoryException;
     

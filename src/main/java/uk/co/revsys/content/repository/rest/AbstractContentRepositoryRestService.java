@@ -143,11 +143,11 @@ public abstract class AbstractContentRepositoryRestService {
 
     @GET
     @Path("/query")
-    public Response findNodes(@QueryParam("query") String query) {
+    public Response findNodes(@QueryParam("query") String query, @QueryParam("offset") int offset, @QueryParam("limit") int limit) {
         try {
             String workspace = authorisationHandler.getUserWorkspace();
             ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
-            List<SearchResult> results = repository.find(query);
+            List<SearchResult> results = repository.find(query, offset, limit);
             return Response.ok(objectMapper.writeValueAsString(results)).build();
         } catch (RepositoryException ex) {
             LOGGER.error("Unable to find nodes", ex);

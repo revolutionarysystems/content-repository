@@ -12,8 +12,9 @@ public class ContentNode<C extends Object> {
     private List<ChildNode> children = new LinkedList<ChildNode>();
     private C content;
     private Date created;
-    private String user;
+    private User createdBy;
     private Date modified;
+    private User modifiedBy;
     private String type;
     private String contentType;
 
@@ -84,12 +85,20 @@ public class ContentNode<C extends Object> {
         this.created = created;
     }
 
-    public String getUser() {
-        return user;
+    public User getCreatedBy() {
+        return createdBy;
     }
 
-    public void setUser(String user) {
-        this.user = user;
+    public void setCreatedBy(User createdBy) {
+        this.createdBy = createdBy;
+    }
+
+    public User getModifiedBy() {
+        return modifiedBy;
+    }
+
+    public void setModifiedBy(User modifiedBy) {
+        this.modifiedBy = modifiedBy;
     }
 
     public Date getModified() {

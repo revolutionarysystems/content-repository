@@ -1,10 +1,11 @@
 package uk.co.revsys.content.repository;
 
+import java.beans.IntrospectionException;
+import java.beans.Introspector;
+import java.beans.PropertyDescriptor;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
-import java.math.BigDecimal;
 import java.util.Calendar;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -14,10 +15,9 @@ import javax.jcr.Binary;
 import javax.jcr.ItemNotFoundException;
 import javax.jcr.Node;
 import javax.jcr.NodeIterator;
-import javax.jcr.Property;
-import javax.jcr.PropertyIterator;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
+import javax.jcr.Value;
 import javax.jcr.nodetype.NodeType;
 import javax.jcr.query.QueryManager;
 import javax.jcr.query.Row;
@@ -25,7 +25,6 @@ import javax.jcr.query.RowIterator;
 import javax.jcr.version.VersionHistory;
 import javax.jcr.version.VersionIterator;
 import javax.jcr.version.VersionManager;
-import org.apache.commons.beanutils.BeanUtils;
 import org.apache.shiro.SecurityUtils;
 import org.apache.shiro.UnavailableSecurityManagerException;
 import org.modeshape.jcr.api.query.Query;
@@ -38,6 +37,7 @@ import uk.co.revsys.content.repository.model.ContentNode;
 import uk.co.revsys.content.repository.model.SearchResult;
 import uk.co.revsys.content.repository.model.Version;
 import uk.co.revsys.user.manager.model.User;
+import uk.co.revsys.utils.bean.BeanUtils;
 
 public class ContentRepositoryServiceImpl implements ContentRepositoryService {
 
@@ -45,9 +45,12 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     private static final String INTERNAL_PROPERTY_PREFIX = "rcr:";
     private static final String INTERNAL_CONTENT_CLASS_PROPERTY = INTERNAL_PROPERTY_PREFIX + "content-class";
     private static final String INTERNAL_CONTENT_TYPE_PROPERTY = INTERNAL_PROPERTY_PREFIX + "content-type";
-    private static final String INTERNAL_USER_PROPERTY = INTERNAL_PROPERTY_PREFIX + "user";
+    private static final String INTERNAL_CREATED_BY_ID_PROPERTY = INTERNAL_PROPERTY_PREFIX + "createdBy-id";
+    private static final String INTERNAL_CREATED_BY_NAME_PROPERTY = INTERNAL_PROPERTY_PREFIX + "createdBy-name";
     private static final String INTERNAL_CREATED_PROPERTY = INTERNAL_PROPERTY_PREFIX + "created";
     private static final String INTERNAL_MODIFIED_PROPERTY = INTERNAL_PROPERTY_PREFIX + "modified";
+    private static final String INTERNAL_MODIFIED_BY_ID_PROPERTY = INTERNAL_PROPERTY_PREFIX + "modifiedBy-id";
+    private static final String INTERNAL_MODIFIED_BY_NAME_PROPERTY = INTERNAL_PROPERTY_PREFIX + "modifiedBy-name";
     private static final String INTERNAL_ATTACHMENTS_FOLDER = INTERNAL_PROPERTY_PREFIX + "attachments";
     private static final String INTERNAL_ATTACHMENT_CONTENT_TYPE = "rcr/attachment";
 
@@ -89,13 +92,13 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             } else {
                 parentNode = root.addNode(path);
             }
-            Map<String, String> properties = BeanUtils.describe(content);
+            Map<String, Object> properties = BeanUtils.getProperties(content);
             ContentName contentNameAnnotation = content.getClass().getAnnotation(ContentName.class);
             String name;
             if (contentNameAnnotation == null) {
                 name = UUID.randomUUID().toString();
             } else {
-                name = properties.get(contentNameAnnotation.value());
+                name = (String) properties.get(contentNameAnnotation.value());
             }
             name = name.replace(" ", "_");
             Node node;
@@ -104,15 +107,20 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             }
             node = parentNode.addNode(name);
             node.addMixin("mix:versionable");
-            for (Entry<String, String> property : properties.entrySet()) {
-                node.setProperty(property.getKey(), property.getValue());
-            }
+            addPropertiesToNode(properties, node);
             node.setProperty(INTERNAL_CREATED_PROPERTY, Calendar.getInstance());
             node.setProperty(INTERNAL_MODIFIED_PROPERTY, Calendar.getInstance());
             try {
-                node.setProperty(INTERNAL_USER_PROPERTY, SecurityUtils.getSubject().getPrincipals().oneByType(User.class).getName());
+                User user = SecurityUtils.getSubject().getPrincipals().oneByType(User.class);
+                node.setProperty(INTERNAL_CREATED_BY_ID_PROPERTY, user.getId());
+                node.setProperty(INTERNAL_CREATED_BY_NAME_PROPERTY, user.getName());
+                node.setProperty(INTERNAL_MODIFIED_BY_ID_PROPERTY, user.getId());
+                node.setProperty(INTERNAL_MODIFIED_BY_NAME_PROPERTY, user.getName());
             } catch (UnavailableSecurityManagerException ex) {
-                node.setProperty(INTERNAL_USER_PROPERTY, "");
+                node.setProperty(INTERNAL_CREATED_BY_ID_PROPERTY, "");
+                node.setProperty(INTERNAL_CREATED_BY_NAME_PROPERTY, "");
+                node.setProperty(INTERNAL_MODIFIED_BY_ID_PROPERTY, "");
+                node.setProperty(INTERNAL_MODIFIED_BY_NAME_PROPERTY, "");
             }
             ContentType contentTypeAnnotation = content.getClass().getAnnotation(ContentType.class);
             node.setProperty(INTERNAL_CONTENT_TYPE_PROPERTY, contentTypeAnnotation.value());
@@ -122,9 +130,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             return contentNode;
         } catch (InvocationTargetException ex) {
             throw new RepositoryException(ex);
-        } catch (IllegalAccessException ex) {
-            throw new RepositoryException(ex);
-        } catch (NoSuchMethodException ex) {
+        } catch (IntrospectionException ex) {
             throw new RepositoryException(ex);
         } finally {
             session.logout();
@@ -137,23 +143,27 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         try {
             Node root = session.getRootNode();
             VersionManager versionManager = session.getWorkspace().getVersionManager();
-            Map<String, String> properties = BeanUtils.describe(content);
+            Map<String, Object> properties = BeanUtils.getProperties(content);
             Node node = root.getNode(path);
             versionManager.checkout(node.getPath());
-            for (Entry<String, String> property : properties.entrySet()) {
-                node.setProperty(property.getKey(), property.getValue());
-            }
+            addPropertiesToNode(properties, node);
             node.setProperty(INTERNAL_CONTENT_CLASS_PROPERTY, content.getClass().getName());
             node.setProperty(INTERNAL_MODIFIED_PROPERTY, Calendar.getInstance());
+            try {
+                User user = SecurityUtils.getSubject().getPrincipals().oneByType(User.class);
+                node.setProperty(INTERNAL_MODIFIED_BY_ID_PROPERTY, user.getId());
+                node.setProperty(INTERNAL_MODIFIED_BY_NAME_PROPERTY, user.getName());
+            } catch (UnavailableSecurityManagerException ex) {
+                node.setProperty(INTERNAL_MODIFIED_BY_ID_PROPERTY, "");
+                node.setProperty(INTERNAL_MODIFIED_BY_NAME_PROPERTY, "");
+            }
             session.save();
             versionManager.checkin(node.getPath());
             ContentNode contentNode = createContentNode(node);
             return contentNode;
         } catch (InvocationTargetException ex) {
             throw new RepositoryException(ex);
-        } catch (IllegalAccessException ex) {
-            throw new RepositoryException(ex);
-        } catch (NoSuchMethodException ex) {
+        } catch (IntrospectionException ex) {
             throw new RepositoryException(ex);
         } finally {
             session.logout();
@@ -174,12 +184,19 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     }
 
     @Override
-    public List<SearchResult> find(String query) throws RepositoryException {
+    public List<SearchResult> find(String expression, int offset, int limit) throws RepositoryException {
         Session session = getSession();
         try {
             QueryManager queryManager = session.getWorkspace().getQueryManager();
             String language = Query.FULL_TEXT_SEARCH;
-            QueryResult result = (QueryResult) queryManager.createQuery(query, language).execute();
+            Query query = (Query) queryManager.createQuery(expression, language);
+            if (offset >= 0) {
+                query.setOffset(offset);
+            }
+            if (limit > 0) {
+                query.setLimit(limit);
+            }
+            QueryResult result = (QueryResult) query.execute();
             RowIterator rowIterator = result.getRows();
             List<SearchResult> results = new LinkedList<SearchResult>();
             while (rowIterator.hasNext()) {
@@ -276,7 +293,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         }
     }
 
-    public void deleteAttachment(String path, String name) throws RepositoryException{
+    public void deleteAttachment(String path, String name) throws RepositoryException {
         Session session = getSession();
         try {
             Node root = session.getRootNode();
@@ -294,7 +311,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             session.logout();
         }
     }
-    
+
     private Session getSession() throws RepositoryException {
         return JCRFactory.getRepository().login(workspace);
     }
@@ -330,23 +347,27 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         if (node.hasProperty(INTERNAL_CONTENT_CLASS_PROPERTY)) {
             try {
                 String contentType = node.getProperty(INTERNAL_CONTENT_CLASS_PROPERTY).getString();
-                Map<String, String> properties = new HashMap<String, String>();
-                PropertyIterator propertyIterator = node.getProperties();
-                while (propertyIterator.hasNext()) {
-                    Property property = propertyIterator.nextProperty();
-                    if (!property.getName().startsWith(INTERNAL_PROPERTY_PREFIX) && !property.getName().startsWith(JCR_PROPERTY_PREFIX)) {
-                        String value = property.getString();
-                        if (value != null) {
-                            properties.put(property.getName(), property.getString());
-                        }
-                    }
-                }
                 Object content = Class.forName(contentType).newInstance();
-                org.apache.commons.beanutils.BeanUtils.populate(content, properties);
+                for(PropertyDescriptor propertyDescriptor: Introspector.getBeanInfo(content.getClass(), Object.class).getPropertyDescriptors()){
+                    Class propertyType = propertyDescriptor.getReadMethod().getReturnType();
+                    Object value;
+                    if(List.class.isAssignableFrom(propertyType)){
+                        List<String> list = new LinkedList<String>();
+                        Value[] values = node.getProperty(propertyDescriptor.getName()).getValues();
+                        for(Value v: values){
+                            list.add(v.getString());
+                        }
+                        value = list;
+                    }else{
+                        value = node.getProperty(propertyDescriptor.getName()).getString();
+                    }
+                    org.apache.commons.beanutils.BeanUtils.setProperty(content, propertyDescriptor.getName(), value);
+                }
                 contentNode.setContent(content);
                 contentNode.setCreated(node.getProperty(INTERNAL_CREATED_PROPERTY).getDate().getTime());
                 contentNode.setModified(node.getProperty(INTERNAL_MODIFIED_PROPERTY).getDate().getTime());
-                contentNode.setUser(node.getProperty(INTERNAL_USER_PROPERTY).getString());
+                contentNode.setCreatedBy(new uk.co.revsys.content.repository.model.User(node.getProperty(INTERNAL_CREATED_BY_ID_PROPERTY).getString(), node.getProperty(INTERNAL_CREATED_BY_NAME_PROPERTY).getString()));
+                contentNode.setModifiedBy(new uk.co.revsys.content.repository.model.User(node.getProperty(INTERNAL_MODIFIED_BY_ID_PROPERTY).getString(), node.getProperty(INTERNAL_MODIFIED_BY_NAME_PROPERTY).getString()));
                 contentNode.setContentType(node.getProperty(INTERNAL_CONTENT_TYPE_PROPERTY).getString());
                 if (node.hasNode(INTERNAL_ATTACHMENTS_FOLDER)) {
                     Node attachmentsNode = node.getNode(INTERNAL_ATTACHMENTS_FOLDER);
@@ -369,9 +390,23 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
                 throw new RepositoryException(ex);
             } catch (InstantiationException ex) {
                 throw new RepositoryException(ex);
+            } catch (IntrospectionException ex) {
+                throw new RepositoryException(ex);
             }
         }
         return contentNode;
+    }
+
+    private void addPropertiesToNode(Map<String, Object> properties, Node node) throws RepositoryException {
+        for (Entry<String, Object> property : properties.entrySet()) {
+            Object value = property.getValue();
+            if (value instanceof List) {
+                List list = (List)value;
+                node.setProperty(property.getKey(), (String[]) list.toArray(new String[list.size()]));
+            } else {
+                node.setProperty(property.getKey(), String.valueOf(property.getValue()));
+            }
+        }
     }
 
 }
