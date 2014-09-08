@@ -2,7 +2,6 @@ package uk.co.revsys.content.repository.rest;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -23,29 +22,25 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import uk.co.revsys.content.repository.ContentRepositoryService;
 import uk.co.revsys.content.repository.ContentRepositoryServiceFactory;
-import uk.co.revsys.content.repository.ServiceInitializer;
-import uk.co.revsys.content.repository.model.Attachment;
-import uk.co.revsys.content.repository.model.ContentNode;
+import uk.co.revsys.content.repository.model.Binary;
 import uk.co.revsys.content.repository.model.SearchResult;
 import uk.co.revsys.content.repository.security.AuthorisationHandler;
 
 @Path("/")
 public abstract class AbstractContentRepositoryRestService {
 
-    private final Logger LOGGER = LoggerFactory.getLogger(ServiceInitializer.class);
+    private final Logger LOGGER = LoggerFactory.getLogger(AbstractContentRepositoryRestService.class);
 
     private final ContentRepositoryServiceFactory repositoryFactory;
     private final ObjectMapper objectMapper;
     private final AuthorisationHandler authorisationHandler;
-    private final Class contentType;
 
-    public AbstractContentRepositoryRestService(ContentRepositoryServiceFactory repositoryFactory, ObjectMapper objectMapper, AuthorisationHandler authorisationHandler, Class contentType) {
+    public AbstractContentRepositoryRestService(ContentRepositoryServiceFactory repositoryFactory, ObjectMapper objectMapper, AuthorisationHandler authorisationHandler) {
         this.repositoryFactory = repositoryFactory;
         this.objectMapper = objectMapper;
         this.authorisationHandler = authorisationHandler;
-        this.contentType = contentType;
     }
-
+    
     @GET
     @Produces(MediaType.APPLICATION_JSON)
     public Response getRootNode(){
@@ -68,71 +63,15 @@ public abstract class AbstractContentRepositoryRestService {
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         }
     }
-    
-    @POST
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Path("/create/")
-    public Response createNodeInRoot(String json){
-        LOGGER.info("Create node in root");
-        System.out.println("Create node in root");
-        return createNode("", json);
-    }
-
-    @POST
-    @Consumes(MediaType.APPLICATION_JSON)       
-    @Path("/create/{path:.*}")
-    public Response createNode(@PathParam("path") String path, String json) {
-        LOGGER.info("Create node " + path + ": " + json);
-        System.out.println("Create node " + path + ": " + json);
-        try {
-            if (!authorisationHandler.isAdministrator()) {
-                return Response.status(Response.Status.FORBIDDEN).build();
-            }
-            Object content = objectMapper.readValue(json, contentType);
-            String workspace = authorisationHandler.getUserWorkspace();
-            ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
-            ContentNode node = repository.create(path, content);
-            return Response.ok(objectMapper.writeValueAsString(node)).build();
-        } catch (IOException ex) {
-            LOGGER.error("Unable to create node", ex);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
-        } catch (RepositoryException ex) {
-            LOGGER.error("Unable to create node", ex);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
-        }
-    }
-
-    @POST
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Path("/update/{path:.*}")
-    public Response updateNode(@PathParam("path") String path, String json) {
-        try {
-            if (!authorisationHandler.isAdministrator()) {
-                return Response.status(Response.Status.FORBIDDEN).build();
-            }
-            Object content = objectMapper.readValue(json, contentType);
-            String workspace = authorisationHandler.getUserWorkspace();
-            ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
-            ContentNode node = repository.update(path, content);
-            return Response.ok(objectMapper.writeValueAsString(node)).build();
-        } catch (IOException ex) {
-            LOGGER.error("Unable to update node", ex);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
-        } catch (RepositoryException ex) {
-            LOGGER.error("Unable to update node", ex);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
-        }
-    }
 
     @DELETE
-    @Path("/delete/{path:.*}")
+    @Path("/{path:.*}")
     public Response deleteNode(@PathParam("path") String path) {
         try {
-            if (!authorisationHandler.isAdministrator()) {
+            if (!isAdministrator()) {
                 return Response.status(Response.Status.FORBIDDEN).build();
             }
-            String workspace = authorisationHandler.getUserWorkspace();
-            ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
+            ContentRepositoryService repository = getRepository();
             repository.delete(path);
             return Response.noContent().build();
         } catch (RepositoryException ex) {
@@ -145,8 +84,7 @@ public abstract class AbstractContentRepositoryRestService {
     @Path("/query")
     public Response findNodes(@QueryParam("query") String query, @QueryParam("offset") int offset, @QueryParam("limit") int limit) {
         try {
-            String workspace = authorisationHandler.getUserWorkspace();
-            ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
+            ContentRepositoryService repository = getRepository();
             List<SearchResult> results = repository.find(query, offset, limit);
             return Response.ok(objectMapper.writeValueAsString(results)).build();
         } catch (RepositoryException ex) {
@@ -163,11 +101,10 @@ public abstract class AbstractContentRepositoryRestService {
     @Produces(MediaType.APPLICATION_JSON)
     public Response getVersions(@PathParam("path") String path) {
         try {
-            if (!authorisationHandler.isAdministrator()) {
+            if (!isAdministrator()) {
                 return Response.status(Response.Status.FORBIDDEN).build();
             }
-            String workspace = authorisationHandler.getUserWorkspace();
-            ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
+            ContentRepositoryService repository = getRepository();
             return Response.ok(objectMapper.writeValueAsString(repository.getVersionHistory(path))).build();
         } catch (JsonProcessingException ex) {
             LOGGER.error("Unable to get versions for " + path, ex);
@@ -180,17 +117,16 @@ public abstract class AbstractContentRepositoryRestService {
 
     @POST
     @Consumes(MediaType.MULTIPART_FORM_DATA)
-    @Path("/attachment/{path:.*}")
-    public Response saveAttachment(@PathParam("path") String path, BufferedInMultiPart bufferedInMultiPart) {
+    @Path("/binary/{path:.*}")
+    public Response saveBinary(@PathParam("path") String path, BufferedInMultiPart bufferedInMultiPart) {
         try {
-            if (!authorisationHandler.isAdministrator()) {
+            if (!isAdministrator()) {
                 return Response.status(Response.Status.FORBIDDEN).build();
             }
-            String workspace = authorisationHandler.getUserWorkspace();
-            ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
+            ContentRepositoryService repository = getRepository();
             List<InPart> parts = bufferedInMultiPart.getParts();
             InPart part = parts.get(0);
-            Attachment attachment = new Attachment();
+            Binary binary = new Binary();
             String contentDisposition = part.getHeaders().getFirst("Content-Disposition");
             String fileName = null;
             Pattern regex = Pattern.compile("(?<=filename=\").*?(?=\")");
@@ -198,34 +134,53 @@ public abstract class AbstractContentRepositoryRestService {
             if (regexMatcher.find()) {
                 fileName = regexMatcher.group();
             }
-            attachment.setName(fileName);
-            attachment.setContentType(part.getContentType());
-            attachment.setContent(part.getInputStream());
-            repository.saveAttachment(path, attachment);
+            binary.setName(fileName);
+            binary.setMimeType(part.getContentType());
+            binary.setContent(part.getInputStream());
+            repository.saveBinary(path, binary);
             return Response.ok().build();
         } catch (RepositoryException ex) {
-            LOGGER.error("Unable to save attachment for " + path, ex);
+            LOGGER.error("Unable to save binary at " + path, ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         }
     }
 
     @GET
-    @Path("/attachment/{path:.*}")
-    public Response getAttachment(@PathParam("path") String path) {
+    @Path("/binary/{path:.*}")
+    public Response getBinary(@PathParam("path") String path) {
         try {
-            if (!authorisationHandler.isAdministrator()) {
+            if (!isAdministrator()) {
                 return Response.status(Response.Status.FORBIDDEN).build();
             }
-            String workspace = authorisationHandler.getUserWorkspace();
-            ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
-            String name = path.substring(path.lastIndexOf("/") + 1);
-            path = path.substring(0, path.lastIndexOf("/"));
-            Attachment attachment = repository.getAttachment(path, name);
-            return Response.ok(attachment.getContent()).type(attachment.getContentType()).build();
+            ContentRepositoryService repository = getRepository();
+            Binary attachment = repository.getBinary(path);
+            return Response.ok(attachment.getContent()).type(attachment.getMimeType()).build();
         } catch (RepositoryException ex) {
-            LOGGER.error("Unable to get attachment for " + path, ex);
+            LOGGER.error("Unable to get binary at " + path, ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
         }
+    }
+
+    public boolean isAdministrator() {
+        return authorisationHandler.isAdministrator();
+    }
+
+    public ContentRepositoryService getRepository() {
+        String workspace = authorisationHandler.getUserWorkspace();
+        ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
+        return repository;
+    }
+
+    public ContentRepositoryServiceFactory getRepositoryFactory() {
+        return repositoryFactory;
+    }
+
+    public ObjectMapper getObjectMapper() {
+        return objectMapper;
+    }
+
+    public AuthorisationHandler getAuthorisationHandler() {
+        return authorisationHandler;
     }
 
 }

@@ -2,13 +2,13 @@ package uk.co.revsys.content.repository.model;
 
 import java.io.InputStream;
 
-public class Attachment {
+public class Binary {
 
     private String name;
-    private String contentType;
+    private String mimeType;
     private InputStream content;
 
-    public Attachment() {
+    public Binary() {
     }
 
     public String getName() {
@@ -19,12 +19,12 @@ public class Attachment {
         this.name = name;
     }
 
-    public String getContentType() {
-        return contentType;
+    public String getMimeType() {
+        return mimeType;
     }
 
-    public void setContentType(String contentType) {
-        this.contentType = contentType;
+    public void setMimeType(String mimeType) {
+        this.mimeType = mimeType;
     }
 
     public InputStream getContent() {
@@ -34,5 +34,5 @@ public class Attachment {
     public void setContent(InputStream content) {
         this.content = content;
     }
-    
+
 }

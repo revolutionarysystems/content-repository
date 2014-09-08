@@ -1,19 +1,22 @@
 package uk.co.revsys.content.repository;
 
 import java.util.List;
+import java.util.Map;
 import javax.jcr.RepositoryException;
-import uk.co.revsys.content.repository.model.Attachment;
+import uk.co.revsys.content.repository.model.AbstractNode;
+import uk.co.revsys.content.repository.model.Binary;
+import uk.co.revsys.content.repository.model.BinaryNode;
 import uk.co.revsys.content.repository.model.ContentNode;
 import uk.co.revsys.content.repository.model.SearchResult;
 import uk.co.revsys.content.repository.model.Version;
 
-public interface ContentRepositoryService<C extends Object> {
+public interface ContentRepositoryService {
 
-    public ContentNode<C> get(String path) throws RepositoryException;
+    public AbstractNode get(String path) throws RepositoryException;
     
-    public ContentNode<C> create(String path, Object content) throws RepositoryException;
+    public ContentNode create(String path, String name, String contentType, Map<String, String> properties) throws RepositoryException;
     
-    public ContentNode<C> update(String path, Object content) throws RepositoryException;
+    public ContentNode update(String path, Map<String, String> properties) throws RepositoryException;
     
     public List<SearchResult> find(String expression, int offset, int limit) throws RepositoryException;
     
@@ -21,9 +24,8 @@ public interface ContentRepositoryService<C extends Object> {
     
     public List<Version> getVersionHistory(String path) throws RepositoryException;
     
-    public void saveAttachment(String path, Attachment attachment) throws RepositoryException;
+    public BinaryNode saveBinary(String path, Binary attachment) throws RepositoryException;
     
-    public Attachment getAttachment(String path, String name) throws RepositoryException;
+    public Binary getBinary(String path) throws RepositoryException;
     
-    public void deleteAttachment(String path, String name) throws RepositoryException;
 }

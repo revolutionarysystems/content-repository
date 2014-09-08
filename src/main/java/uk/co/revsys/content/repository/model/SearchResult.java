@@ -6,7 +6,7 @@ public class SearchResult {
 
     private double score;
     @JsonUnwrapped
-    private ContentNode node;
+    private AbstractNode node;
 
     public double getScore() {
         return score;
@@ -16,11 +16,11 @@ public class SearchResult {
         this.score = score;
     }
 
-    public ContentNode getNode() {
+    public AbstractNode getNode() {
         return node;
     }
 
-    public void setNode(ContentNode node) {
+    public void setNode(AbstractNode node) {
         this.node = node;
     }
     
