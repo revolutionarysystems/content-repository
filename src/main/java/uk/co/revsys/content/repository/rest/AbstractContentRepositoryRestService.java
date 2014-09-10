@@ -82,6 +82,7 @@ public abstract class AbstractContentRepositoryRestService {
 
     @GET
     @Path("/query")
+    @Produces(MediaType.APPLICATION_JSON)
     public Response findNodes(@QueryParam("query") String query, @QueryParam("offset") int offset, @QueryParam("limit") int limit) {
         try {
             ContentRepositoryService repository = getRepository();
@@ -118,6 +119,7 @@ public abstract class AbstractContentRepositoryRestService {
     @POST
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Path("/binary/{path:.*}")
+    @Produces(MediaType.APPLICATION_JSON)
     public Response saveBinary(@PathParam("path") String path, BufferedInMultiPart bufferedInMultiPart) {
         try {
             if (!isAdministrator()) {
