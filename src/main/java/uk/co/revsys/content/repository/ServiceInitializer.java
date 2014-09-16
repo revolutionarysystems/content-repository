@@ -1,17 +1,12 @@
 package uk.co.revsys.content.repository;
 
 import java.net.URL;
-import java.text.DateFormat;
-import java.util.Date;
 import java.util.concurrent.ExecutionException;
 import javax.jcr.Repository;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
 import javax.servlet.ServletContextEvent;
 import javax.servlet.ServletContextListener;
-import org.apache.commons.beanutils.ConvertUtils;
-import org.apache.commons.beanutils.converters.DateConverter;
-import org.apache.commons.beanutils.converters.DateTimeConverter;
 import org.infinispan.schematic.document.ParsingException;
 import org.modeshape.common.collection.Problems;
 import org.modeshape.jcr.ConfigurationException;
@@ -27,10 +22,10 @@ public class ServiceInitializer implements ServletContextListener {
 
     @Override
     public void contextInitialized(ServletContextEvent sce) {
-        init();
+        init("repository.json");
     }
 
-    public void init() {
+    public void init(String configFile) {
         engine = new ModeShapeEngine();
         engine.start();
 
@@ -39,7 +34,7 @@ public class ServiceInitializer implements ServletContextListener {
 //        ConvertUtils.register(dtConverter, Date.class);
 
         try {
-            URL url = ServiceInitializer.class.getClassLoader().getResource("repository.json");
+            URL url = ServiceInitializer.class.getClassLoader().getResource(configFile);
             RepositoryConfiguration config = RepositoryConfiguration.read(url);
             config.getBinaryStorage();
             Problems problems = config.validate();
@@ -55,6 +50,7 @@ public class ServiceInitializer implements ServletContextListener {
             session.getWorkspace().getNamespaceRegistry().registerNamespace("rcr", "http://www.revolutionarysystems.co.uk");
             session.logout();
         } catch (RepositoryException ex) {
+            ex.printStackTrace();
             LOGGER.error("Problems loading the repository", ex);
             throw new RuntimeException("Problems loading the repository", ex);
         } catch (ParsingException ex) {

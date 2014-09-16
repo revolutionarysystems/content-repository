@@ -4,3 +4,7 @@
 /transaction.log
 /nb-configuration.xml
 /test.html
+/src/test/resources/s3-infinispan-configuration.xml
+/src/test/resources/s3-repository.json
+/src/test/resources/mongo-repository.json
+/src/test/resources/mongo-infinispan-configuration.xml

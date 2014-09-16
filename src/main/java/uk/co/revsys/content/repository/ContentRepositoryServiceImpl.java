@@ -185,8 +185,11 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         Session session = getSession();
         try {
             QueryManager queryManager = session.getWorkspace().getQueryManager();
-            String language = Query.FULL_TEXT_SEARCH;
-            Query query = (Query) queryManager.createQuery(expression, language);
+            //String language = Query.FULL_TEXT_SEARCH;
+            //Query query = (Query) queryManager.createQuery(expression, language);
+            String language = Query.JCR_SQL2;
+            String queryString = "SELECT * FROM [nt:unstructured] WHERE CONTAINS(., '" + expression + "')";
+            Query query = (Query) queryManager.createQuery(queryString, language);
             if (offset >= 0) {
                 query.setOffset(offset);
             }

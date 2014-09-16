@@ -86,7 +86,7 @@
             <dependency>
                 <groupId>org.modeshape.bom</groupId>
                 <artifactId>modeshape-bom-embedded</artifactId>
-                <version>4.0.0.Beta1</version>
+                <version>3.8.0.Final</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -97,6 +97,36 @@
         <dependency>
             <groupId>org.modeshape</groupId>
             <artifactId>modeshape-jcr</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.infinispan</groupId>
+            <artifactId>infinispan-cachestore-jdbc</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.infinispan</groupId>
+            <artifactId>infinispan-cachestore-cloud</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.jclouds.provider</groupId>
+            <artifactId>aws-s3</artifactId>
+            <version>1.4.1</version>
+            <scope>test</scope>
+        </dependency>
+        
+        <dependency>
+            <groupId>c3p0</groupId>
+            <artifactId>c3p0</artifactId>
+            <version>0.9.1.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.h2database</groupId>
+            <artifactId>h2</artifactId>
+            <version>1.2.124</version>
+            <scope>test</scope>
         </dependency>
         
         <dependency>
