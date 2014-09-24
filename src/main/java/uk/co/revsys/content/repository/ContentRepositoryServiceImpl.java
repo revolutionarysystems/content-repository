@@ -7,12 +7,14 @@ import java.util.Map;
 import java.util.Map.Entry;
 import javax.jcr.ItemExistsException;
 import javax.jcr.ItemNotFoundException;
+import javax.jcr.NoSuchWorkspaceException;
 import javax.jcr.Node;
 import javax.jcr.NodeIterator;
 import javax.jcr.Property;
 import javax.jcr.PropertyIterator;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
+import javax.jcr.Workspace;
 import javax.jcr.nodetype.NodeType;
 import javax.jcr.query.QueryManager;
 import javax.jcr.query.Row;
@@ -298,7 +300,15 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     }
 
     private Session getSession() throws RepositoryException {
-        return JCRFactory.getRepository().login(workspace);
+        Session session;
+        try {
+            session = JCRFactory.getRepository().login(workspace);
+        } catch (NoSuchWorkspaceException ex) {
+            session = JCRFactory.getRepository().login();
+            session.getWorkspace().createWorkspace(workspace);
+            session = JCRFactory.getRepository().login(workspace);
+        }
+        return session;
     }
 
     private AbstractNode createNodeWrapper(Node node) throws RepositoryException {
