@@ -68,9 +68,6 @@ public abstract class AbstractContentRepositoryRestService {
     @Path("/{path:.*}")
     public Response deleteNode(@PathParam("path") String path) {
         try {
-            if (!isAdministrator()) {
-                return Response.status(Response.Status.FORBIDDEN).build();
-            }
             ContentRepositoryService repository = getRepository();
             repository.delete(path);
             return Response.noContent().build();
@@ -102,9 +99,6 @@ public abstract class AbstractContentRepositoryRestService {
     @Produces(MediaType.APPLICATION_JSON)
     public Response getVersions(@PathParam("path") String path) {
         try {
-            if (!isAdministrator()) {
-                return Response.status(Response.Status.FORBIDDEN).build();
-            }
             ContentRepositoryService repository = getRepository();
             return Response.ok(objectMapper.writeValueAsString(repository.getVersionHistory(path))).build();
         } catch (JsonProcessingException ex) {
@@ -122,9 +116,6 @@ public abstract class AbstractContentRepositoryRestService {
     @Produces(MediaType.APPLICATION_JSON)
     public Response saveBinary(@PathParam("path") String path, BufferedInMultiPart bufferedInMultiPart) {
         try {
-            if (!isAdministrator()) {
-                return Response.status(Response.Status.FORBIDDEN).build();
-            }
             ContentRepositoryService repository = getRepository();
             List<InPart> parts = bufferedInMultiPart.getParts();
             InPart part = parts.get(0);
@@ -151,9 +142,6 @@ public abstract class AbstractContentRepositoryRestService {
     @Path("/binary/{path:.*}")
     public Response getBinary(@PathParam("path") String path) {
         try {
-            if (!isAdministrator()) {
-                return Response.status(Response.Status.FORBIDDEN).build();
-            }
             ContentRepositoryService repository = getRepository();
             Binary attachment = repository.getBinary(path);
             return Response.ok(attachment.getContent()).type(attachment.getMimeType()).build();
