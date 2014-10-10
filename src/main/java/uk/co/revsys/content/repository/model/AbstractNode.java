@@ -4,6 +4,7 @@ import java.util.Date;
 
 public abstract class AbstractNode {
 
+    private Status status = Status.published;
     private String path;
     private String name;
     private String parent;
@@ -75,6 +76,14 @@ public abstract class AbstractNode {
 
     public void setContentType(String contentType) {
         this.contentType = contentType;
+    }
+
+    public Status getStatus() {
+        return status;
+    }
+
+    public void setStatus(Status status) {
+        this.status = status;
     }
     
 }

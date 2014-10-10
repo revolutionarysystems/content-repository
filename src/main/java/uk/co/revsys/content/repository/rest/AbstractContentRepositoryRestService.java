@@ -24,6 +24,7 @@ import uk.co.revsys.content.repository.ContentRepositoryService;
 import uk.co.revsys.content.repository.ContentRepositoryServiceFactory;
 import uk.co.revsys.content.repository.model.Binary;
 import uk.co.revsys.content.repository.model.SearchResult;
+import uk.co.revsys.content.repository.model.Status;
 import uk.co.revsys.content.repository.security.AuthorisationHandler;
 
 @Path("/")
@@ -54,7 +55,7 @@ public abstract class AbstractContentRepositoryRestService {
         try {
             String workspace = authorisationHandler.getUserWorkspace();
             ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
-            return Response.ok(objectMapper.writeValueAsString(repository.get(path))).build();
+            return Response.ok(objectMapper.writeValueAsString(repository.get(path, false))).build();
         } catch (JsonProcessingException ex) {
             LOGGER.error("Unable to get node " + path, ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
@@ -83,7 +84,7 @@ public abstract class AbstractContentRepositoryRestService {
     public Response findNodes(@QueryParam("query") String query, @QueryParam("offset") int offset, @QueryParam("limit") int limit) {
         try {
             ContentRepositoryService repository = getRepository();
-            List<SearchResult> results = repository.find(query, offset, limit);
+            List<SearchResult> results = repository.find(query, false, offset, limit);
             return Response.ok(objectMapper.writeValueAsString(results)).build();
         } catch (RepositoryException ex) {
             LOGGER.error("Unable to find nodes", ex);

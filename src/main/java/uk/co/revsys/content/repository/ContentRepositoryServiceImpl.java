@@ -5,16 +5,15 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
-import javax.jcr.ItemExistsException;
 import javax.jcr.ItemNotFoundException;
 import javax.jcr.NoSuchWorkspaceException;
 import javax.jcr.Node;
 import javax.jcr.NodeIterator;
+import javax.jcr.PathNotFoundException;
 import javax.jcr.Property;
 import javax.jcr.PropertyIterator;
 import javax.jcr.RepositoryException;
 import javax.jcr.Session;
-import javax.jcr.Workspace;
 import javax.jcr.nodetype.NodeType;
 import javax.jcr.query.QueryManager;
 import javax.jcr.query.Row;
@@ -33,6 +32,7 @@ import uk.co.revsys.content.repository.model.ChildNode;
 import uk.co.revsys.content.repository.model.ContainerNode;
 import uk.co.revsys.content.repository.model.ContentNode;
 import uk.co.revsys.content.repository.model.SearchResult;
+import uk.co.revsys.content.repository.model.Status;
 import uk.co.revsys.content.repository.model.Version;
 import uk.co.revsys.user.manager.model.User;
 
@@ -47,6 +47,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     private static final String INTERNAL_MODIFIED_PROPERTY = INTERNAL_PROPERTY_PREFIX + "modified";
     private static final String INTERNAL_MODIFIED_BY_ID_PROPERTY = INTERNAL_PROPERTY_PREFIX + "modifiedBy-id";
     private static final String INTERNAL_MODIFIED_BY_NAME_PROPERTY = INTERNAL_PROPERTY_PREFIX + "modifiedBy-name";
+    private static final String INTERNAL_STATUS_PROPERTY = INTERNAL_PROPERTY_PREFIX + "status";
     private static final String INTERNAL_CONTAINER_CONTENT_TYPE = "rcr/container";
     private static final String INTERNAL_BINARY_CONTENT_TYPE = "rcr/binary";
     private static final String INTERNAL_BINARY_FILE_NODE_NAME = INTERNAL_PROPERTY_PREFIX + "file";
@@ -58,7 +59,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     }
 
     @Override
-    public AbstractNode get(String path) throws RepositoryException {
+    public AbstractNode get(String path, boolean published) throws RepositoryException {
         Session session = getSession();
         try {
             Node root = session.getRootNode();
@@ -68,14 +69,18 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             } else {
                 node = root.getNode(path);
             }
-            return createNodeWrapper(node);
+            AbstractNode nodeWrapper = createNodeWrapper(node, published);
+            if(published && !nodeWrapper.getStatus().equals(Status.published)){
+                throw new PathNotFoundException(path);
+            }
+            return nodeWrapper;
         } finally {
             session.logout();
         }
     }
 
     @Override
-    public ContentNode create(String path, String name, String contentType, Map<String, String> properties) throws RepositoryException {
+    public ContentNode create(String path, String name, Status status, String contentType, Map<String, String> properties) throws RepositoryException {
         Session session = getSession();
         try {
             Node root = session.getRootNode();
@@ -93,7 +98,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             if (parentNode.isNodeType("mix:versionable")) {
                 versionManager.checkout(parentNode.getPath());
             }
-            Node node = createNode(parentNode, name);
+            Node node = createNode(parentNode, name, status);
             for (Entry<String, String> property : properties.entrySet()) {
                 node.setProperty(property.getKey(), property.getValue());
             }
@@ -102,17 +107,18 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             if (parentNode.isNodeType("mix:versionable")) {
                 versionManager.checkin(parentNode.getPath());
             }
-            return createContentNodeWrapper(node);
+            return createContentNodeWrapper(node, false);
         } finally {
             session.logout();
         }
     }
 
-    private Node createNode(Node parentNode, String name) throws RepositoryException {
+    private Node createNode(Node parentNode, String name, Status status) throws RepositoryException {
         Node node = parentNode.addNode(name);
         node.addMixin("mix:versionable");
         node.setProperty(INTERNAL_CREATED_PROPERTY, Calendar.getInstance());
         node.setProperty(INTERNAL_MODIFIED_PROPERTY, Calendar.getInstance());
+        node.setProperty(INTERNAL_STATUS_PROPERTY, status.name());
         try {
             User user = SecurityUtils.getSubject().getPrincipals().oneByType(User.class);
             node.setProperty(INTERNAL_CREATED_BY_ID_PROPERTY, user.getId());
@@ -129,28 +135,29 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     }
 
     @Override
-    public ContentNode update(String path, Map<String, String> properties) throws RepositoryException {
+    public ContentNode update(String path, Status status, Map<String, String> properties) throws RepositoryException {
         Session session = getSession();
         try {
             Node root = session.getRootNode();
             Node node = root.getNode(path);
             VersionManager manager = session.getWorkspace().getVersionManager();
             manager.checkout(node.getPath());
-            updateNode(node);
+            updateNode(node, status);
             for (Entry<String, String> property : properties.entrySet()) {
                 node.setProperty(property.getKey(), property.getValue());
             }
             node.setProperty(INTERNAL_MODIFIED_PROPERTY, Calendar.getInstance());
             session.save();
             manager.checkin(node.getPath());
-            return createContentNodeWrapper(node);
+            return createContentNodeWrapper(node, false);
         } finally {
             session.logout();
         }
     }
 
-    private void updateNode(Node node) throws RepositoryException {
+    private void updateNode(Node node, Status status) throws RepositoryException {
         node.setProperty(INTERNAL_MODIFIED_PROPERTY, Calendar.getInstance());
+        node.setProperty(INTERNAL_STATUS_PROPERTY, status.name());
         try {
             User user = SecurityUtils.getSubject().getPrincipals().oneByType(User.class);
             node.setProperty(INTERNAL_MODIFIED_BY_ID_PROPERTY, user.getId());
@@ -183,7 +190,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     }
 
     @Override
-    public List<SearchResult> find(String expression, int offset, int limit) throws RepositoryException {
+    public List<SearchResult> find(String expression, boolean published, int offset, int limit) throws RepositoryException {
         Session session = getSession();
         try {
             QueryManager queryManager = session.getWorkspace().getQueryManager();
@@ -203,11 +210,14 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             List<SearchResult> results = new LinkedList<SearchResult>();
             while (rowIterator.hasNext()) {
                 Row row = rowIterator.nextRow();
-                SearchResult searchResult = new SearchResult();
-                searchResult.setScore(row.getScore());
                 Node node = row.getNode();
-                searchResult.setNode(createNodeWrapper(node));
-                results.add(searchResult);
+                AbstractNode nodeWrapper = createNodeWrapper(node, published);
+                if (!published || nodeWrapper.getStatus().equals(Status.published)) {
+                    SearchResult searchResult = new SearchResult();
+                    searchResult.setScore(row.getScore());
+                    searchResult.setNode(createNodeWrapper(node, published));
+                    results.add(searchResult);
+                }
             }
             return results;
         } finally {
@@ -263,10 +273,10 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
                 if (!node.hasProperty(INTERNAL_CONTENT_TYPE_PROPERTY) || !node.getProperty(INTERNAL_CONTENT_TYPE_PROPERTY).getString().equals(INTERNAL_BINARY_CONTENT_TYPE)) {
                     throw new RepositoryException(path + "/" + binary.getName() + " already exists and is not a binary");
                 }
-                updateNode(node);
+                updateNode(node, Status.published);
                 contentNode = node.getNode(INTERNAL_BINARY_FILE_NODE_NAME).getNode("jcr:content");
             } else {
-                node = createNode(parentNode, binary.getName());
+                node = createNode(parentNode, binary.getName(), Status.published);
                 node.setProperty(INTERNAL_CONTENT_TYPE_PROPERTY, INTERNAL_BINARY_CONTENT_TYPE);
                 contentNode = node.addNode(INTERNAL_BINARY_FILE_NODE_NAME, NodeType.NT_FILE).addNode("jcr:content", NodeType.NT_RESOURCE);
             }
@@ -311,28 +321,28 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         return session;
     }
 
-    private AbstractNode createNodeWrapper(Node node) throws RepositoryException {
+    private AbstractNode createNodeWrapper(Node node, boolean published) throws RepositoryException {
         if (!node.hasProperty(INTERNAL_CONTENT_TYPE_PROPERTY)) {
-            return createContainerNodeWrapper(node);
+            return createContainerNodeWrapper(node, published);
         } else {
             String contentType = node.getProperty(INTERNAL_CONTENT_TYPE_PROPERTY).getString();
             if (contentType.equals(INTERNAL_BINARY_CONTENT_TYPE)) {
                 return createBinaryNodeWrapper(node);
             } else {
-                return createContentNodeWrapper(node);
+                return createContentNodeWrapper(node, published);
             }
         }
     }
 
-    private ContentNode createContentNodeWrapper(Node node) throws RepositoryException {
+    private ContentNode createContentNodeWrapper(Node node, boolean published) throws RepositoryException {
         ContentNode contentNode = new ContentNode();
-        updateContentNodeWrapper(contentNode, node);
+        updateContentNodeWrapper(contentNode, node, published);
         return contentNode;
     }
 
-    private ContainerNode createContainerNodeWrapper(Node node) throws RepositoryException {
+    private ContainerNode createContainerNodeWrapper(Node node, boolean published) throws RepositoryException {
         ContainerNode containerNode = new ContainerNode();
-        updateContainerNodeWrapper(containerNode, node);
+        updateContainerNodeWrapper(containerNode, node, published);
         return containerNode;
     }
 
@@ -342,15 +352,18 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         return binaryNode;
     }
 
-    private void updateContainerNodeWrapper(ContainerNode containerNode, Node node) throws RepositoryException {
+    private void updateContainerNodeWrapper(ContainerNode containerNode, Node node, boolean published) throws RepositoryException {
         updateAbstractNodeWrapper(containerNode, node);
         NodeIterator iterator = node.getNodes();
         while (iterator.hasNext()) {
             Node child = iterator.nextNode();
-            if (!child.getName().startsWith(JCR_PROPERTY_PREFIX)) {
+            if (!child.getName().startsWith(JCR_PROPERTY_PREFIX) && (!published || child.getProperty(INTERNAL_STATUS_PROPERTY).getString().equals(Status.published.name()))) {
                 ChildNode childNode = new ChildNode();
                 childNode.setName(child.getName());
                 childNode.setPath(child.getPath());
+                if(child.hasProperty(INTERNAL_STATUS_PROPERTY)){
+                    childNode.setStatus(Status.valueOf(child.getProperty(INTERNAL_STATUS_PROPERTY).getString()));
+                }
                 if (child.hasProperty(INTERNAL_CONTENT_TYPE_PROPERTY)) {
                     childNode.setContentType(child.getProperty(INTERNAL_CONTENT_TYPE_PROPERTY).getString());
                 } else {
@@ -361,8 +374,8 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         }
     }
 
-    private void updateContentNodeWrapper(ContentNode contentNode, Node node) throws RepositoryException {
-        updateContainerNodeWrapper(contentNode, node);
+    private void updateContentNodeWrapper(ContentNode contentNode, Node node, boolean published) throws RepositoryException {
+        updateContainerNodeWrapper(contentNode, node, published);
         PropertyIterator iterator = node.getProperties();
         while (iterator.hasNext()) {
             Property property = iterator.nextProperty();
@@ -384,6 +397,9 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             abstractNode.setParent(node.getParent().getPath());
         } catch (ItemNotFoundException ex) {
             // Ignore
+        }
+        if(node.hasProperty(INTERNAL_STATUS_PROPERTY)){
+            abstractNode.setStatus(Status.valueOf(node.getProperty(INTERNAL_STATUS_PROPERTY).getString()));
         }
         if (node.hasProperty(INTERNAL_CONTENT_TYPE_PROPERTY)) {
             abstractNode.setContentType(node.getProperty(INTERNAL_CONTENT_TYPE_PROPERTY).getString());

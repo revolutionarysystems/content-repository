@@ -37,7 +37,7 @@ public class PublicContentRepositoryRestService {
     public Response getNode(@PathParam("workspace") String workspace, @PathParam("path") String path) {
         try {
             ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
-            return Response.ok(objectMapper.writeValueAsString(repository.get(path))).build();
+            return Response.ok(objectMapper.writeValueAsString(repository.get(path, true))).build();
         } catch (JsonProcessingException ex) {
             LOGGER.error("Unable to get node " + path, ex);
             return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(ex.getMessage()).build();
@@ -53,7 +53,7 @@ public class PublicContentRepositoryRestService {
     public Response findNodes(@PathParam("workspace") String workspace, @QueryParam("query") String query, @QueryParam("offset") int offset, @QueryParam("limit") int limit) {
         try {
             ContentRepositoryService repository = repositoryFactory.getInstance(workspace);
-            List<SearchResult> results = repository.find(query, offset, limit);
+            List<SearchResult> results = repository.find(query, true, offset, limit);
             return Response.ok(objectMapper.writeValueAsString(results)).build();
         } catch (RepositoryException ex) {
             LOGGER.error("Unable to find nodes", ex);

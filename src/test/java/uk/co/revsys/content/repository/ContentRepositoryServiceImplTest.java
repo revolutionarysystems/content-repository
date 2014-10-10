@@ -26,6 +26,7 @@ import uk.co.revsys.content.repository.model.BinaryNode;
 import uk.co.revsys.content.repository.model.ContainerNode;
 import uk.co.revsys.content.repository.model.ContentNode;
 import uk.co.revsys.content.repository.model.SearchResult;
+import uk.co.revsys.content.repository.model.Status;
 import uk.co.revsys.content.repository.model.Version;
 import uk.co.revsys.user.manager.model.User;
 import uk.co.revsys.user.manager.test.util.AbstractShiroTest;
@@ -81,15 +82,17 @@ public class ContentRepositoryServiceImplTest extends AbstractShiroTest {
         properties1.put("property1", "value1");
         properties1.put("property2", "This is another test. Blah blah blah. foobar");
         System.out.println("Creating item");
-        ContentNode contentNode = repository.create("abc", "Test_Item_1", "rcr/test", properties1);
+        ContentNode contentNode = repository.create("abc", "Test_Item_1", Status.published, "rcr/test", properties1);
         System.out.println("Create Item: " + (new Date().getTime() - startPartial.getTime()));
         assertEquals("/abc/Test_Item_1", contentNode.getPath());
         assertEquals("Test_Item_1", contentNode.getName());
+        assertEquals(Status.published, contentNode.getStatus());
         startPartial = new Date();
-        contentNode = (ContentNode) repository.get("abc/Test_Item_1");
+        contentNode = (ContentNode) repository.get("abc/Test_Item_1", false);
         System.out.println("Get Item: " + (new Date().getTime() - startPartial.getTime()));
         assertEquals("/abc/Test_Item_1", contentNode.getPath());
         assertEquals("Test_Item_1", contentNode.getName());
+        assertEquals(Status.published, contentNode.getStatus());
         assertEquals("/abc", contentNode.getParent());
         assertEquals("1234", contentNode.getCreatedBy().getId());
         assertEquals("Test User", contentNode.getCreatedBy().getName());
@@ -99,27 +102,36 @@ public class ContentRepositoryServiceImplTest extends AbstractShiroTest {
         assertEquals("Test Item 1", contentNode.getProperties().get("name"));
         assertEquals("value1", contentNode.getProperties().get("property1"));
         // Get root node
-        ContainerNode rootNode = (ContainerNode) repository.get("");
+        ContainerNode rootNode = (ContainerNode) repository.get("", false);
         assertEquals("/", rootNode.getPath());
         // Update Test Item 1
         startPartial = new Date();
         properties1.put("property1", "value2");
-        repository.update("abc/Test_Item_1", properties1);
+        repository.update("abc/Test_Item_1", Status.published, properties1);
         System.out.println("Update Item: " + (new Date().getTime() - startPartial.getTime()));
-        contentNode = (ContentNode) repository.get("abc/Test_Item_1");
+        contentNode = (ContentNode) repository.get("abc/Test_Item_1", false);
         assertEquals("value2", contentNode.getProperties().get("property1"));
-        ContainerNode containerNode = (ContainerNode) repository.get("abc");
+        ContainerNode containerNode = (ContainerNode) repository.get("abc", false);
         assertEquals(1, containerNode.getChildren().size());
         assertEquals("Test_Item_1", containerNode.getChildren().get(0).getName());
         // Create Test Item 2
         Map<String, String> properties2 = new HashMap<String, String>();
         properties2.put("name", "Test Item 2");
-        repository.create("abc", "Test_Item_2", "rcr/test", properties2);
-        repository.get("abc/Test_Item_2");
-        containerNode = (ContainerNode) repository.get("abc");
+        contentNode = repository.create("abc", "Test_Item_2", Status.draft, "rcr/test", properties2);
+        assertEquals(Status.draft, contentNode.getStatus());
+        contentNode = (ContentNode) repository.get("abc/Test_Item_2", false);
+        try {
+            contentNode = (ContentNode) repository.get("abc/Test_Item_2", true);
+            fail("Expected PathNotFoundException to be thrown");
+        } catch (PathNotFoundException ex) {
+            // pass
+        }
+        containerNode = (ContainerNode) repository.get("abc", false);
         assertEquals(2, containerNode.getChildren().size());
+        containerNode = (ContainerNode) repository.get("abc", true);
+        assertEquals(1, containerNode.getChildren().size());
         startPartial = new Date();
-        List<SearchResult> results = repository.find("value2", 0, 2);
+        List<SearchResult> results = repository.find("value2", false, 0, 2);
         System.out.println("Search: " + (new Date().getTime() - startPartial.getTime()));
         System.out.println(new ObjectMapper().writeValueAsString(results));
         assertEquals(1, results.size());
@@ -128,10 +140,10 @@ public class ContentRepositoryServiceImplTest extends AbstractShiroTest {
         startPartial = new Date();
         repository.delete("abc/Test_Item_2");
         System.out.println("Delete Item: " + (new Date().getTime() - startPartial.getTime()));
-        containerNode = (ContainerNode) repository.get("abc");
+        containerNode = (ContainerNode) repository.get("abc", false);
         assertEquals(1, containerNode.getChildren().size());
         try {
-            repository.get("abc/Test_Item_2");
+            repository.get("abc/Test_Item_2", false);
             fail("Expected path not found exception to be thrown");
         } catch (PathNotFoundException ex) {
 
@@ -147,7 +159,7 @@ public class ContentRepositoryServiceImplTest extends AbstractShiroTest {
         binary.setContent(new ByteArrayInputStream("This is a test".getBytes()));
         repository.saveBinary("abc", binary);
         System.out.println("Save binary: " + (new Date().getTime() - startPartial.getTime()));
-        BinaryNode binaryNode = (BinaryNode) repository.get("abc/test.txt");
+        BinaryNode binaryNode = (BinaryNode) repository.get("abc/test.txt", false);
         assertEquals("/abc/test.txt", binaryNode.getPath());
         assertEquals("test.txt", binaryNode.getName());
         assertEquals("text/plain", binaryNode.getMimeType());
@@ -159,35 +171,35 @@ public class ContentRepositoryServiceImplTest extends AbstractShiroTest {
         System.out.println("Get binary: " + (new Date().getTime() - startPartial.getTime()));
         assertEquals("text/plain", binary.getMimeType());
         assertEquals("This is a test", IOUtils.toString(binary.getContent()));
-        results = repository.find("test.txt", 0, 0);
+        results = repository.find("test.txt", false, 0, 0);
         System.out.println(new ObjectMapper().writeValueAsString(results));
         assertEquals(1, results.size());
         assertEquals("test.txt", results.get(0).getNode().getName());
         // Delete binary
         repository.delete("abc/test.txt");
         try {
-            repository.get("abc/Test_Item_2");
+            repository.get("abc/Test_Item_2", false);
             fail("Expected path not found exception to be thrown");
         } catch (PathNotFoundException ex) {
 
         }
         // Add parts to content node
         repository.saveBinary("abc/Test_Item_1", binary);
-        contentNode = (ContentNode) repository.get("abc/Test_Item_1");
+        contentNode = (ContentNode) repository.get("abc/Test_Item_1", false);
         assertEquals(1, contentNode.getChildren().size());
         repository.delete("abc/Test_Item_1/test.txt");
-        contentNode = (ContentNode) repository.get("abc/Test_Item_1");
+        contentNode = (ContentNode) repository.get("abc/Test_Item_1", false);
         assertEquals(0, contentNode.getChildren().size());
-        repository.create("abc/Test_Item_1", "Sub_Item_1", "test/item", properties2);
-        contentNode = (ContentNode) repository.get("abc/Test_Item_1");
+        repository.create("abc/Test_Item_1", "Sub_Item_1", Status.published, "test/item", properties2);
+        contentNode = (ContentNode) repository.get("abc/Test_Item_1", false);
         assertEquals(1, contentNode.getChildren().size());
-        repository.update("abc/Test_Item_1/Sub_Item_1", properties2);
+        repository.update("abc/Test_Item_1/Sub_Item_1", Status.published, properties2);
         repository.delete("abc/Test_Item_1/Sub_Item_1");
-        contentNode = (ContentNode) repository.get("abc/Test_Item_1");
+        contentNode = (ContentNode) repository.get("abc/Test_Item_1", false);
         assertEquals(0, contentNode.getChildren().size());
         // Using an alternative workspace
         repository = new ContentRepositoryServiceImpl("other");
-        rootNode = (ContainerNode) repository.get("");
+        rootNode = (ContainerNode) repository.get("", false);
         assertEquals("/", rootNode.getPath());
     }
 
