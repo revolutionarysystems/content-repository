@@ -13,6 +13,7 @@ public abstract class AbstractNode {
     private Date modified;
     private User modifiedBy;
     private String contentType;
+    private String tags;
 
     public String getPath() {
         return path;
@@ -84,6 +85,14 @@ public abstract class AbstractNode {
 
     public void setStatus(Status status) {
         this.status = status;
+    }
+
+    public String getTags() {
+        return tags;
+    }
+
+    public void setTags(String tags) {
+        this.tags = tags;
     }
     
 }

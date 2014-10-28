@@ -48,6 +48,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     private static final String INTERNAL_MODIFIED_BY_ID_PROPERTY = INTERNAL_PROPERTY_PREFIX + "modifiedBy-id";
     private static final String INTERNAL_MODIFIED_BY_NAME_PROPERTY = INTERNAL_PROPERTY_PREFIX + "modifiedBy-name";
     private static final String INTERNAL_STATUS_PROPERTY = INTERNAL_PROPERTY_PREFIX + "status";
+    private static final String INTERNAL_TAGS_PROPERTY = INTERNAL_PROPERTY_PREFIX + "tags";
     private static final String INTERNAL_CONTAINER_CONTENT_TYPE = "rcr/container";
     private static final String INTERNAL_BINARY_CONTENT_TYPE = "rcr/binary";
     private static final String INTERNAL_BINARY_FILE_NODE_NAME = INTERNAL_PROPERTY_PREFIX + "file";
@@ -80,7 +81,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     }
 
     @Override
-    public ContentNode create(String path, String name, Status status, String contentType, Map<String, String> properties) throws RepositoryException {
+    public ContentNode create(String path, String name, Status status, String tags, String contentType, Map<String, String> properties) throws RepositoryException {
         Session session = getSession();
         try {
             Node root = session.getRootNode();
@@ -98,7 +99,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
             if (parentNode.isNodeType("mix:versionable")) {
                 versionManager.checkout(parentNode.getPath());
             }
-            Node node = createNode(parentNode, name, status);
+            Node node = createNode(parentNode, name, status, tags);
             for (Entry<String, String> property : properties.entrySet()) {
                 node.setProperty(property.getKey(), property.getValue());
             }
@@ -113,12 +114,13 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         }
     }
 
-    private Node createNode(Node parentNode, String name, Status status) throws RepositoryException {
+    private Node createNode(Node parentNode, String name, Status status, String tags) throws RepositoryException {
         Node node = parentNode.addNode(name);
         node.addMixin("mix:versionable");
         node.setProperty(INTERNAL_CREATED_PROPERTY, Calendar.getInstance());
         node.setProperty(INTERNAL_MODIFIED_PROPERTY, Calendar.getInstance());
         node.setProperty(INTERNAL_STATUS_PROPERTY, status.name());
+        node.setProperty(INTERNAL_TAGS_PROPERTY, tags);
         try {
             User user = SecurityUtils.getSubject().getPrincipals().oneByType(User.class);
             node.setProperty(INTERNAL_CREATED_BY_ID_PROPERTY, user.getId());
@@ -135,14 +137,14 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     }
 
     @Override
-    public ContentNode update(String path, Status status, Map<String, String> properties) throws RepositoryException {
+    public ContentNode update(String path, Status status, String tags, Map<String, String> properties) throws RepositoryException {
         Session session = getSession();
         try {
             Node root = session.getRootNode();
             Node node = root.getNode(path);
             VersionManager manager = session.getWorkspace().getVersionManager();
             manager.checkout(node.getPath());
-            updateNode(node, status);
+            updateNode(node, status, tags);
             for (Entry<String, String> property : properties.entrySet()) {
                 node.setProperty(property.getKey(), property.getValue());
             }
@@ -155,9 +157,10 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         }
     }
 
-    private void updateNode(Node node, Status status) throws RepositoryException {
+    private void updateNode(Node node, Status status, String tags) throws RepositoryException {
         node.setProperty(INTERNAL_MODIFIED_PROPERTY, Calendar.getInstance());
         node.setProperty(INTERNAL_STATUS_PROPERTY, status.name());
+        node.setProperty(INTERNAL_TAGS_PROPERTY, tags);
         try {
             User user = SecurityUtils.getSubject().getPrincipals().oneByType(User.class);
             node.setProperty(INTERNAL_MODIFIED_BY_ID_PROPERTY, user.getId());
@@ -252,7 +255,7 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
     }
 
     @Override
-    public BinaryNode saveBinary(String path, Binary binary) throws RepositoryException {
+    public BinaryNode saveBinary(String path, String tags, Binary binary) throws RepositoryException {
         Session session = getSession();
         try {
             Node root = session.getRootNode();
@@ -273,10 +276,10 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
                 if (!node.hasProperty(INTERNAL_CONTENT_TYPE_PROPERTY) || !node.getProperty(INTERNAL_CONTENT_TYPE_PROPERTY).getString().equals(INTERNAL_BINARY_CONTENT_TYPE)) {
                     throw new RepositoryException(path + "/" + binary.getName() + " already exists and is not a binary");
                 }
-                updateNode(node, Status.published);
+                updateNode(node, Status.published, tags);
                 contentNode = node.getNode(INTERNAL_BINARY_FILE_NODE_NAME).getNode("jcr:content");
             } else {
-                node = createNode(parentNode, binary.getName(), Status.published);
+                node = createNode(parentNode, binary.getName(), Status.published, tags);
                 node.setProperty(INTERNAL_CONTENT_TYPE_PROPERTY, INTERNAL_BINARY_CONTENT_TYPE);
                 contentNode = node.addNode(INTERNAL_BINARY_FILE_NODE_NAME, NodeType.NT_FILE).addNode("jcr:content", NodeType.NT_RESOURCE);
             }
@@ -400,6 +403,9 @@ public class ContentRepositoryServiceImpl implements ContentRepositoryService {
         }
         if(node.hasProperty(INTERNAL_STATUS_PROPERTY)){
             abstractNode.setStatus(Status.valueOf(node.getProperty(INTERNAL_STATUS_PROPERTY).getString()));
+        }
+        if(node.hasProperty(INTERNAL_TAGS_PROPERTY)){
+            abstractNode.setTags(node.getProperty(INTERNAL_TAGS_PROPERTY).getString());
         }
         if (node.hasProperty(INTERNAL_CONTENT_TYPE_PROPERTY)) {
             abstractNode.setContentType(node.getProperty(INTERNAL_CONTENT_TYPE_PROPERTY).getString());

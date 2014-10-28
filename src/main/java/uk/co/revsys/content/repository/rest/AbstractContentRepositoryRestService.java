@@ -131,7 +131,7 @@ public abstract class AbstractContentRepositoryRestService {
             binary.setName(fileName);
             binary.setMimeType(part.getContentType());
             binary.setContent(part.getInputStream());
-            repository.saveBinary(path, binary);
+            repository.saveBinary(path, "", binary);
             return Response.ok().build();
         } catch (RepositoryException ex) {
             LOGGER.error("Unable to save binary at " + path, ex);
