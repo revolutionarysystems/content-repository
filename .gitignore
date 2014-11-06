@@ -8,3 +8,6 @@
 /src/test/resources/s3-repository.json
 /src/test/resources/mongo-repository.json
 /src/test/resources/mongo-infinispan-configuration.xml
+/src/test/resources/mysql-repository.json
+/src/test/resources/mysql-infinispan-configuration.xml
+/src/test/java/uk/co/revsys/content/repository/MySQLContentRepositoryServiceImplTest.java
