@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<infinispan xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="urn:infinispan:config:5.1 http://www.infinispan.org/schemas/infinispan-config-5.1.xsd"
+            xmlns="urn:infinispan:config:5.1">
+    <global>
+    </global>
+
+    <default>
+    </default>
+
+    <namedCache name="pr">
+        <loaders passivation="false" shared="false" preload="false">
+            <loader class="uk.co.revsys.content.repository.mongo.FongoDBCacheStore" 
+                    fetchPersistentState="false" ignoreModifications="false"
+                    purgeOnStartup="true">
+              <properties>
+                 <property name="host" value="localhost"/>
+                 <property name="port" value="27017"/>
+                 <property name="timeout" value="2000"/>
+                 <property name="acknowledgment" value="0"/>
+                 <property name="username" value=""/>
+                 <property name="password" value=""/>
+                 <property name="database" value="infinispan_test_database"/>
+                 <property name="collection" value="infispan_cachestore"/>
+              </properties>
+           </loader>
+        </loaders>
+
+        <transaction
+            transactionManagerLookupClass="org.infinispan.transaction.lookup.DummyTransactionManagerLookup"
+            transactionMode="TRANSACTIONAL" lockingMode="OPTIMISTIC" />
+            
+    </namedCache>
+
+</infinispan>
