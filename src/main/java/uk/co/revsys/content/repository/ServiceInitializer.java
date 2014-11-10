@@ -29,20 +29,14 @@ public class ServiceInitializer implements ServletContextListener {
         engine = new ModeShapeEngine();
         engine.start();
 
-//        DateTimeConverter dtConverter = new DateConverter();
-//        dtConverter.setPattern("E MMM dd HH:mm:ss z yyyy");
-//        ConvertUtils.register(dtConverter, Date.class);
-
         try {
             URL url = ServiceInitializer.class.getClassLoader().getResource(configFile);
             RepositoryConfiguration config = RepositoryConfiguration.read(url);
-            config.getBinaryStorage();
             Problems problems = config.validate();
             if (problems.hasErrors()) {
                 LOGGER.error("Problems starting the engine: " + problems);
                 throw new RuntimeException("Problems starting the engine: " + problems);
             }
-
             engine.deploy(config);
             Repository repository = engine.getRepository(config.getName());
             JCRFactory.setRepository(repository);
